@@ -32,9 +32,14 @@ export default async function Home() {
           Signed in as <span className="font-medium">{session.user.email}</span> ✅
         </p>
       </div>
-      <Link href="/upload">
-        <Button size="lg">+ Create a deck</Button>
-      </Link>
+      <div className="flex gap-3">
+        <Link href="/upload">
+          <Button size="lg">+ Create a deck</Button>
+        </Link>
+        <Link href="/decks">
+          <Button size="lg" variant="outline">Your decks</Button>
+        </Link>
+      </div>
       <form
         action={async () => {
           "use server";

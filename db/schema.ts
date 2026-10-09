@@ -84,6 +84,7 @@ export const cards = pgTable(
     dueAt: timestamp("due_at", { withTimezone: true }).notNull().defaultNow(),
     status: cardStatus("status").notNull().default("new"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sourcePage: integer("source_page"),
   },
   (t) => [
     index("cards_deck_idx").on(t.deckId),
