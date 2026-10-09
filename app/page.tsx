@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
+
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await auth();
 
-  // ── Signed out ──
   if (!session?.user) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
@@ -24,15 +24,17 @@ export default async function Home() {
     );
   }
 
-  // ── Signed in ──
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-4">
       <div className="text-center space-y-2">
         <h1 className="text-4xl font-bold tracking-tight">Recall</h1>
         <p className="text-muted-foreground">
           Signed in as <span className="font-medium">{session.user.email}</span> ✅
         </p>
       </div>
+      <Link href="/upload">
+        <Button size="lg">+ Create a deck</Button>
+      </Link>
       <form
         action={async () => {
           "use server";
