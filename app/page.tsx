@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await auth();
