@@ -45,15 +45,19 @@ export default async function DecksPage() {
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           {rows.map((d) => (
-            <UICard key={d.id}>
-              <CardHeader>
-                <CardTitle className="text-lg">{d.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {d.cardCount} {d.cardCount === 1 ? "card" : "cards"} ·{" "}
-                {new Date(d.createdAt).toLocaleDateString()}
-              </CardContent>
-            </UICard>
+            <Link key={d.id} href={`/decks/${d.id}`} className="group">
+              <UICard className="h-full transition-colors group-hover:border-muted-foreground/40">
+                <CardHeader>
+                  <CardTitle className="truncate" title={d.title}>
+                    {d.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  {d.cardCount} {d.cardCount === 1 ? "card" : "cards"} ·{" "}
+                  {new Date(d.createdAt).toLocaleDateString()}
+                </CardContent>
+              </UICard>
+            </Link>
           ))}
         </div>
       )}
