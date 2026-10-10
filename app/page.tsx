@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dashboard } from "@/components/ui/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -27,28 +28,16 @@ const features = [
 ];
 
 const steps = [
-  {
-    n: 1,
-    title: "Drop a PDF",
-    description: "Text is extracted instantly — right in your browser.",
-  },
-  {
-    n: 2,
-    title: "Review & edit",
-    description: "Approve, fix, or delete each AI-generated card. Nothing is saved until you say so.",
-  },
-  {
-    n: 3,
-    title: "Study on schedule",
-    description: "Recall tells you exactly which cards are due today. Rate each one and the schedule adapts.",
-  },
+  { n: 1, title: "Drop a PDF", description: "Text is extracted instantly — right in your browser." },
+  { n: 2, title: "Review & edit", description: "Approve, fix, or delete each AI-generated card. Nothing is saved until you say so." },
+  { n: 3, title: "Study on schedule", description: "Recall tells you exactly which cards are due today. Rate each one and the schedule adapts." },
 ];
 
 export default async function Home() {
   const session = await auth();
 
-  // ── Signed out: the landing page ──
-  if (!session?.user) {
+  // ── Signed out: landing page ──
+  if (!session?.user?.id) {
     return (
       <main className="flex min-h-screen flex-col">
         <section className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-24 text-center">
@@ -75,9 +64,7 @@ export default async function Home() {
                 <span className="text-3xl">{f.icon}</span>
                 <CardTitle className="mt-2 text-lg">{f.title}</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {f.description}
-              </CardContent>
+              <CardContent className="text-sm text-muted-foreground">{f.description}</CardContent>
             </Card>
           ))}
         </section>
@@ -112,31 +99,27 @@ export default async function Home() {
     );
   }
 
-  // ── Signed in: quick actions ──
+  // ── Signed in: dashboard ──
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-4">
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold tracking-tight">Welcome back 👋</h1>
-        <p className="text-muted-foreground">
-          Signed in as <span className="font-medium">{session.user.email}</span>
-        </p>
+    <main className="mx-auto max-w-5xl px-4 py-12">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Welcome back 👋</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Signed in as <span className="font-medium">{session.user.email}</span>
+          </p>
+        </div>
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/login" });
+          }}
+        >
+          <Button variant="ghost" type="submit">Sign out</Button>
+        </form>
       </div>
-      <div className="flex gap-3">
-        <Link href="/upload">
-          <Button size="lg">+ Create a deck</Button>
-        </Link>
-        <Link href="/decks">
-          <Button size="lg" variant="outline">Your decks</Button>
-        </Link>
-      </div>
-      <form
-        action={async () => {
-          "use server";
-          await signOut({ redirectTo: "/login" });
-        }}
-      >
-        <Button variant="ghost" type="submit">Sign out</Button>
-      </form>
+
+      <Dashboard userId={session.user.id} />
     </main>
   );
 }
