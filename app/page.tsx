@@ -102,22 +102,7 @@ export default async function Home() {
   // ── Signed in: dashboard ──
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Welcome back 👋</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Signed in as <span className="font-medium">{session.user.email}</span>
-          </p>
-        </div>
-        <form
-          action={async () => {
-            "use server";
-            await signOut({ redirectTo: "/login" });
-          }}
-        >
-          <Button variant="ghost" type="submit">Sign out</Button>
-        </form>
-      </div>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome back 👋</h1>
 
       <Dashboard userId={session.user.id} />
     </main>
