@@ -5,6 +5,7 @@ import {
   users, accounts, authenticators, sessions, verificationTokens,
 } from "@/db/schema";
 import type { EmailConfig } from "next-auth/providers/email";
+import GoogleProvider from "next-auth/providers/google";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
@@ -18,6 +19,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // when the adapter ships updated types.
   } as any),
   providers: [
+        GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      // Vincula la cuenta Google a un usuario existente con el mismo email
+      // (ej: tu cuenta creada vía magic link). Seguro aquí: Google verifica
+      // que el email realmente pertenece a quien inicia sesión.
+      allowDangerousEmailAccountLinking: true,
+    }),
     // Raw provider object instead of EmailProvider({...}).
     // Providers are plain config; the EmailProvider factory adds defaults
     // AND (in current versions) throws at construction unless an SMTP

@@ -1,11 +1,10 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { login } from "./actions";
+import { googleLogin, login } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
   const session = await auth();
@@ -17,10 +16,22 @@ export default async function LoginPage() {
         <CardHeader>
           <CardTitle className="text-2xl">Sign in to Recall</CardTitle>
           <CardDescription>
-            Enter your email and we&apos;ll send you a login link. No passwords, ever.
+            One click with Google, or a magic link — no passwords, ever.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <form action={googleLogin}>
+            <Button variant="outline" type="submit" className="w-full">
+              Continue with Google
+            </Button>
+          </form>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">or with email</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <form action={login} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

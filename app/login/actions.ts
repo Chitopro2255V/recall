@@ -6,7 +6,11 @@ import { redirect } from "next/navigation";
 export async function login(formData: FormData) {
   await signIn("email", {
     email: formData.get("email") as string,
-    redirect: false, // don't follow Auth.js's redirect suggestion…
+    redirect: false,
   });
-  redirect("/verify"); // …we decide where the user goes instead
+  redirect("/verify");
+}
+
+export async function googleLogin() {
+  await signIn("google", { redirectTo: "/" });
 }
