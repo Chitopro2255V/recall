@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   try {
     const results = await mapLimit(chunks, 2, (chunk) =>
       generateObject({
-        model: google("gemini-2.5-flash"),
+        model: google("gemini-flash-latest"),
         schema: cardListSchema,
         system: SYSTEM_PROMPT,
         prompt: `Material (pages ${chunk.startPage}–${chunk.endPage}):\n\n${chunk.text}`,
