@@ -80,7 +80,7 @@ export async function Dashboard({ userId }: { userId: string }) {
             </p>
           </div>
           <Link href="/decks">
-            <Button>Choose a deck →</Button>
+            <Button>Start studying →</Button>
           </Link>
         </div>
       )}

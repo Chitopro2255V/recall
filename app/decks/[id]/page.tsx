@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { decks, cards } from "@/db/schema";
 import { Card as UICard, CardContent } from "@/components/ui/card";
 import { DeleteDeckButton } from "./delete-button";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,9 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
           </p>
         </div>
         <DeleteDeckButton deckId={deck.id} deckTitle={deck.title} />
+        <Link href={`/decks/${deck.id}/study`} className="shrink-0">
+          <Button>Study</Button>
+        </Link>
       </div>
 
       <div className="mt-8 space-y-3">
