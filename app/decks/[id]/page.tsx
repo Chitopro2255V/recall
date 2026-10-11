@@ -52,10 +52,15 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
             {deck.sourceFilename ? ` · from ${deck.sourceFilename}` : ""}
           </p>
         </div>
-        <DeleteDeckButton deckId={deck.id} deckTitle={deck.title} />
-        <Link href={`/decks/${deck.id}/study`} className="shrink-0">
-          <Button>Study</Button>
-        </Link>
+                <div className="flex shrink-0 items-start gap-2">
+          <Link href={`/decks/${deck.id}/study`}>
+            <Button>Study</Button>
+          </Link>
+          <Link href={`/decks/${deck.id}/study?mode=practice`}>
+            <Button variant="outline">Practice</Button>
+          </Link>
+          <DeleteDeckButton deckId={deck.id} deckTitle={deck.title} />
+        </div>
       </div>
 
       <div className="mt-8 space-y-3">

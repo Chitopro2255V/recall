@@ -5,50 +5,60 @@ import { db } from "@/db";
 import { decks, cards, reviews } from "@/db/schema";
 import { review as sm2Review, type Rating } from "@/lib/sm2";
 
-// ── Start a session: fetch due cards ─────────────────────────────
-// GET /api/study?deckId=...
+const cardColumns = {
+  id: cards.id,
+  front: cards.front,
+  back: cards.back,
+  ease: cards.ease,
+  intervalDays: cards.intervalDays,
+  reps: cards.reps,
+  lapses: cards.lapses,
+};
 
+// ── GET: the study queue ─────────────────────────────────────────
+//   ?deckId=...               → due cards only (SM-2 scheduled)
+//   ?deckId=...&mode=practice → ALL cards, no schedule impact
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const deckId = new URL(req.url).searchParams.get("deckId");
+  const url = new URL(req.url);
+  const deckId = url.searchParams.get("deckId");
+  const practice = url.searchParams.get("mode") === "practice";
+
   if (!deckId) {
     return Response.json({ error: "Missing deckId" }, { status: 400 });
   }
 
-  // Ownership baked into the query (IDOR protection, like always).
-  // Due = dueAt <= now, excluding suspended cards. Limit 30 keeps
-  // sessions focused — Anki does the same.
-  const dueCards = await db
-    .select({
-      id: cards.id,
-      front: cards.front,
-      back: cards.back,
-      ease: cards.ease,
-      intervalDays: cards.intervalDays,
-      reps: cards.reps,
-      lapses: cards.lapses,
-    })
-    .from(cards)
-    .innerJoin(decks, eq(cards.deckId, decks.id))
-    .where(
-      and(
+  // Practice ignores dueAt; scheduled study enforces it.
+  // Ownership via join in both cases (IDOR protection, as always).
+  const where = practice
+    ? and(
+        eq(decks.id, deckId),
+        eq(decks.userId, session.user.id),
+        ne(cards.status, "suspended")
+      )
+    : and(
         eq(decks.id, deckId),
         eq(decks.userId, session.user.id),
         lte(cards.dueAt, new Date()),
         ne(cards.status, "suspended")
-      )
-    )
-    .limit(30);
+      );
 
-  return Response.json({ cards: dueCards });
+  const rows = await db
+    .select(cardColumns)
+    .from(cards)
+    .innerJoin(decks, eq(cards.deckId, decks.id))
+    .where(where)
+    .limit(practice ? 50 : 30);
+
+  return Response.json({ cards: rows });
 }
 
-// ── Rate a card: SM-2 → DB ───────────────────────────────────────
-// POST /api/study  { cardId, rating }
+// ── POST: rate a card — SM-2 update + review log ─────────────────
+// (practice mode never calls this; that's the whole point)
 
 const ratingSchema = z.object({
   cardId: z.string().uuid(),
@@ -67,7 +77,6 @@ export async function POST(req: Request) {
   }
   const { cardId, rating } = parsed.data;
 
-  // Load the card AND verify ownership via join — one query.
   const [card] = await db
     .select({
       id: cards.id,
@@ -85,14 +94,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Card not found" }, { status: 404 });
   }
 
-  // ── The heart of the whole app: our tested engine decides ──
   const next = sm2Review(
     { ease: card.ease, intervalDays: card.intervalDays, reps: card.reps, lapses: card.lapses },
     rating as Rating
   );
 
-  // Two writes: update card state + append to the immutable review log.
-  // The log is what powers Phase 4's stats — never skip it.
   await db
     .update(cards)
     .set({
@@ -111,8 +117,5 @@ export async function POST(req: Request) {
     intervalAfter: next.intervalDays,
   });
 
-  return Response.json({
-    nextDueAt: next.dueAt,
-    intervalDays: next.intervalDays,
-  });
+  return Response.json({ nextDueAt: next.dueAt, intervalDays: next.intervalDays });
 }
