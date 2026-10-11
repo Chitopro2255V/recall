@@ -1,7 +1,7 @@
 export type PageText = { page: number; text: string };
 export type Chunk = { startPage: number; endPage: number; text: string };
 
-const TARGET = 15_000; // ≈ 4k tokens of material per Gemini call
+const TARGET = 18_000; // ≈ 4.5k tokens — fewer Gemini calls per document // ≈ 4k tokens of material per Gemini call
 const OVERLAP = 500;   // tail of previous chunk prepended, so concepts
                        // sitting on a boundary don't get cut in half
 

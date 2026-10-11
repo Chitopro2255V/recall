@@ -4,9 +4,11 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { chunkPages, type PageText } from "@/lib/chunker";
 
-export const maxDuration = 300; // generation can take a while for long docs
+// Vercel Hobby hard-caps functions at 60s no matter what we declare —
+// so we declare honestly and size the work to fit inside it.
+export const maxDuration = 60;
 
-const MAX_CHARS = 120_000; // ≈ 30 dense pages — v1 cap
+const MAX_CHARS = 90_000; // ~22 dense pages — worst case fits in the 60s budget
 const MAX_CARDS = 100;
 
 const SYSTEM_PROMPT = `You are an expert flashcard author creating a study deck from source material.
@@ -30,7 +32,6 @@ const cardListSchema = z.object({
   ),
 });
 
-// Tiny concurrency limiter — run N promises at a time, keep results in order.
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -46,13 +47,11 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 export async function POST(req: Request) {
-  // 1. Auth — generation costs quota, signed-in users only
   const session = await auth();
   if (!session?.user?.email) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. Input: pages: [{ page, text }]
   const body = await req.json().catch(() => null);
   const pages: PageText[] = (Array.isArray(body?.pages) ? body.pages : [])
     .map((p: { page?: number; text?: string }) => ({
@@ -67,28 +66,34 @@ export async function POST(req: Request) {
   }
   if (totalChars > MAX_CHARS) {
     return Response.json(
-      { error: "Document too long for v1 (max ~30 pages). Try a shorter PDF." },
+      { error: "Document too long for v1 (max ~22 pages). Try a shorter PDF." },
       { status: 400 }
     );
   }
 
-  // 3. Chunk, then generate cards per chunk (2 at a time — free tier is ~10 req/min)
   const chunks = chunkPages(pages);
   let cards: { front: string; back: string; sourcePage: number }[];
 
   try {
     const results = await mapLimit(chunks, 2, (chunk) =>
       generateObject({
-        model: google("gemini-flash-latest"),
+        model: google("gemini-2.5-flash"),
         schema: cardListSchema,
         system: SYSTEM_PROMPT,
         prompt: `Material (pages ${chunk.startPage}–${chunk.endPage}):\n\n${chunk.text}`,
+        // Card extraction needs no chain-of-thought. Disabling "thinking"
+        // cuts per-call latency from ~25s to ~5-10s.
+        providerOptions: {
+          google: { thinkingConfig: { thinkingBudget: 0 } },
+        },
+        // Default is 2 silent retries with backoff — on a 429 that's a
+        // minute of looking "hung". Fail fast and say what happened.
+        maxRetries: 1,
       }).then((r) =>
         r.object.cards.map((c) => ({ ...c, sourcePage: c.sourcePage || chunk.startPage }))
       )
     );
 
-    // 4. Dedupe near-identical fronts (chunks overlap, so repeats happen)
     const seen = new Set<string>();
     cards = results
       .flat()
@@ -100,10 +105,21 @@ export async function POST(req: Request) {
       })
       .slice(0, MAX_CARDS);
   } catch (err) {
-    return Response.json(
-      { error: "Card generation failed", detail: String(err) },
-      { status: 500 }
-    );
+    const msg = String(err);
+
+    // 429 = Gemini free-tier quota. One key serves EVERY user of the app,
+    // so concurrent testers drain it together.
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota")) {
+      return Response.json(
+        {
+          error:
+            "The AI hit its free-tier rate limit (it's shared by all users of this app). Wait about a minute and try again — if it persists, today's daily quota may be exhausted.",
+        },
+        { status: 429 }
+      );
+    }
+
+    return Response.json({ error: "Card generation failed", detail: msg }, { status: 500 });
   }
 
   return Response.json({ cards });
