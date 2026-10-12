@@ -11,11 +11,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.93",
+    "@ai-sdk/google": "^2.0.102",
     "@auth/drizzle-adapter": "^1.11.3",
     "@base-ui/react": "^1.9.0",
     "@neondatabase/serverless": "^1.2.0",
-    "ai": "^7.0.137",
+    "ai": "^5.0.273",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "drizzle-orm": "^0.45.4",
