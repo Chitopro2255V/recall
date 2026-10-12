@@ -149,7 +149,7 @@ export async function POST(req: Request) {
         system: PROMPTS.flashcard,
         prompt: material,
         // Speed boost (3-4x): uncomment ONLY if @ai-sdk/google is v2+
-        providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+        //providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
         maxRetries: 1,
       });
       return r.object.cards.map<GeneratedCard>((c) => ({
