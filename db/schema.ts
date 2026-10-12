@@ -1,6 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
-  pgTable, pgEnum, uuid, text, integer, real, timestamp, index, primaryKey,
+  pgTable, pgEnum, uuid, text, integer, real, timestamp, index, primaryKey, jsonb
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -76,6 +76,8 @@ export const cards = pgTable(
     front: text("front").notNull(),
     back: text("back").notNull(),
     type: text("type").notNull().default("basic"), // basic | cloze (V2)
+    options: jsonb("options").$type<string[] | null>(), // quiz options (null for flashcards)
+    correctIndex: integer("correct_index"), // index of the correct option
     // --- SM-2 state (used in M3) ---
     ease: real("ease").notNull().default(2.5),
     intervalDays: integer("interval_days").notNull().default(0),

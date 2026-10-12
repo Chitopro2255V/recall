@@ -2,16 +2,25 @@
 
 import { useCallback, useRef, useState } from "react";
 import { extractPdfText } from "@/lib/pdf";
+import type { GeneratedCard } from "@/lib/card-types";
 import { Button } from "@/components/ui/button";
-import { ReviewEditor, type FlashCard } from "./review";
+import { ReviewEditor } from "./review";
 
 type Phase = "idle" | "extracting" | "generating" | "done" | "error";
+type Mode = "flashcard" | "quiz" | "tf";
+
+const MODES: { id: Mode; icon: string; label: string; desc: string }[] = [
+  { id: "flashcard", icon: "🃏", label: "Flashcards", desc: "Question on one side, answer on the other" },
+  { id: "quiz", icon: "📝", label: "Multiple choice", desc: "4 options — pick the right one" },
+  { id: "tf", icon: "⚖️", label: "True / False", desc: "Judge each statement" },
+];
 
 export function Uploader() {
+  const [mode, setMode] = useState<Mode>("flashcard");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
-  const [cards, setCards] = useState<FlashCard[]>([]);
+  const [cards, setCards] = useState<GeneratedCard[]>([]);
   const [filename, setFilename] = useState("");
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -42,12 +51,12 @@ export function Uploader() {
       }
 
       setPhase("generating");
-      setProgress("Generating flashcards… this usually takes 10–30 seconds. Don't close the tab.");
+      setProgress("Generating… this usually takes 10–30 seconds. Don't close the tab.");
 
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pages }),
+        body: JSON.stringify({ pages, mode }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Generation failed.");
@@ -62,13 +71,33 @@ export function Uploader() {
       setError(e instanceof Error ? e.message : String(e));
       setPhase("error");
     }
-  }, []);
+  }, [mode]);
 
   const busy = phase === "extracting" || phase === "generating";
 
   if (phase === "idle" || phase === "error") {
     return (
       <div className="mt-8 space-y-4">
+        <div>
+          <p className="mb-2 text-sm font-medium">Choose your study mode</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMode(m.id)}
+                className={`flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors ${
+                  mode === m.id ? "border-primary bg-muted" : "border-border hover:border-muted-foreground/40"
+                }`}
+              >
+                <span className="text-2xl">{m.icon}</span>
+                <span className="font-medium">{m.label}</span>
+                <span className="text-xs text-muted-foreground">{m.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div
           role="button"
           tabIndex={0}
@@ -82,7 +111,7 @@ export function Uploader() {
             const file = e.dataTransfer.files?.[0];
             if (file) void handleFile(file);
           }}
-          className={`flex h-64 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+          className={`flex h-56 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
             dragging ? "border-primary bg-muted" : "border-border hover:border-muted-foreground/40"
           }`}
         >
@@ -99,7 +128,7 @@ export function Uploader() {
           />
           <span className="text-4xl">📄</span>
           <p className="font-medium">Drag & drop a PDF here</p>
-          <p className="text-sm text-muted-foreground">or click to browse — max ~30 pages for v1</p>
+          <p className="text-sm text-muted-foreground">or click to browse — max ~22 pages for v1</p>
         </div>
         {phase === "error" && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
@@ -112,7 +141,7 @@ export function Uploader() {
 
   if (busy) {
     return (
-      <div className="mt-8 flex h-64 flex-col items-center justify-center gap-3 rounded-xl border p-8 text-center">
+      <div className="mt-8 flex h-56 flex-col items-center justify-center gap-3 rounded-xl border p-8 text-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
         <p className="font-medium">{filename}</p>
         <p className="text-sm text-muted-foreground">{progress}</p>
@@ -125,7 +154,7 @@ export function Uploader() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{filename}</span> →{" "}
-          {cards.length} cards generated
+          {cards.length} items generated
         </p>
         <Button variant="outline" size="sm" onClick={() => setPhase("idle")}>
           Start over

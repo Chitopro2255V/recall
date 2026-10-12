@@ -3,34 +3,60 @@ import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { chunkPages, type PageText } from "@/lib/chunker";
+import type { GeneratedCard } from "@/lib/card-types";
 
-// Vercel Hobby hard-caps functions at 60s no matter what we declare —
-// so we declare honestly and size the work to fit inside it.
 export const maxDuration = 60;
 
-const MAX_CHARS = 90_000; // ~22 dense pages — worst case fits in the 60s budget
+const MAX_CHARS = 90_000;
 const MAX_CARDS = 100;
 
-const SYSTEM_PROMPT = `You are an expert flashcard author creating a study deck from source material.
+type Mode = "flashcard" | "quiz" | "tf";
 
-Rules:
-- Extract the most important testable concepts: definitions, mechanisms, comparisons, cause and effect. Skip fluff, headers, page furniture, citations.
-- Each card tests exactly ONE concept.
-- Front: a specific question with exactly one correct answer. Prefer why/how/what-distinguishes over guessable trivia.
-- Back: 1-3 sentences, self-contained.
-- Only use information present in the material. Never invent.
-- sourcePage: the page number where the answer appears.
-- Generate 5-12 cards. Fewer is fine if the material is thin.`;
-
-const cardListSchema = z.object({
-  cards: z.array(
-    z.object({
-      front: z.string().min(1).max(300),
-      back: z.string().min(1).max(1000),
-      sourcePage: z.number().int().min(0),
-    })
-  ),
+const flashcardSchema = z.object({
+  cards: z.array(z.object({
+    front: z.string().min(1).max(300),
+    back: z.string().min(1).max(1000),
+    sourcePage: z.number().int().min(0),
+  })),
 });
+
+const mcSchema = z.object({
+  questions: z.array(z.object({
+    question: z.string().min(1).max(300),
+    options: z.array(z.string().min(1).max(300)).length(4),
+    correctIndex: z.number().int().min(0).max(3),
+    sourcePage: z.number().int().min(0),
+  })),
+});
+
+const tfSchema = z.object({
+  statements: z.array(z.object({
+    statement: z.string().min(1).max(300),
+    answer: z.boolean(),
+    sourcePage: z.number().int().min(0),
+  })),
+});
+
+const BASE_RULES = `- Only use information present in the material. Never invent.
+- Each item tests exactly ONE concept.
+- sourcePage: the page number where the answer appears.
+- Skip fluff, headers, page furniture, citations.`;
+
+const PROMPTS: Record<Mode, string> = {
+  flashcard: `${BASE_RULES}
+- Front: a specific question with exactly one correct answer.
+- Back: 1-3 sentences, self-contained.
+- Generate 5-12 cards.`,
+  quiz: `${BASE_RULES}
+- Exactly 4 options, exactly one correct.
+- Distractors must be plausible but clearly wrong to someone who knows the material.
+- Vary the correct answer's position across questions (don't always put it first).
+- Generate 3-8 questions.`,
+  tf: `${BASE_RULES}
+- Statements must be unambiguously true or false based on the material.
+- Aim for roughly half true and half false — a list of all-true is useless for studying.
+- Generate 5-10 statements.`,
+};
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
@@ -53,6 +79,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
+  const mode: Mode =
+    body?.mode === "quiz" ? "quiz" : body?.mode === "tf" ? "tf" : "flashcard";
+
   const pages: PageText[] = (Array.isArray(body?.pages) ? body.pages : [])
     .map((p: { page?: number; text?: string }) => ({
       page: Number(p?.page) || 1,
@@ -72,30 +101,67 @@ export async function POST(req: Request) {
   }
 
   const chunks = chunkPages(pages);
-  let cards: { front: string; back: string; sourcePage: number }[];
 
   try {
-    const results = await mapLimit(chunks, 2, (chunk) =>
-      generateObject({
+    const results = await mapLimit(chunks, 2, async (chunk) => {
+      const material = `Material (pages ${chunk.startPage}–${chunk.endPage}):\n\n${chunk.text}`;
+
+      // Each mode: its own schema, its own prompt, normalized to GeneratedCard[]
+      if (mode === "quiz") {
+        const r = await generateObject({
+          model: google("gemini-flash-latest"),
+          schema: mcSchema,
+          system: PROMPTS.quiz,
+          prompt: material,
+          maxRetries: 1,
+        });
+        return r.object.questions.map<GeneratedCard>((q) => ({
+          type: "mc",
+          front: q.question,
+          back: q.options[q.correctIndex],
+          options: q.options,
+          correctIndex: q.correctIndex,
+          sourcePage: q.sourcePage || chunk.startPage,
+        }));
+      }
+
+      if (mode === "tf") {
+        const r = await generateObject({
+          model: google("gemini-flash-latest"),
+          schema: tfSchema,
+          system: PROMPTS.tf,
+          prompt: material,
+          maxRetries: 1,
+        });
+        return r.object.statements.map<GeneratedCard>((s) => ({
+          type: "tf",
+          front: s.statement,
+          back: s.answer ? "True" : "False",
+          options: ["True", "False"],
+          correctIndex: s.answer ? 0 : 1,
+          sourcePage: s.sourcePage || chunk.startPage,
+        }));
+      }
+
+      const r = await generateObject({
         model: google("gemini-flash-latest"),
-        schema: cardListSchema,
-        system: SYSTEM_PROMPT,
-        prompt: `Material (pages ${chunk.startPage}–${chunk.endPage}):\n\n${chunk.text}`,
-        // Card extraction needs no chain-of-thought. Disabling "thinking"
-        // cuts per-call latency from ~25s to ~5-10s.
-        providerOptions: {
-          google: { thinkingConfig: { thinkingBudget: 0 } },
-        },
-        // Default is 2 silent retries with backoff — on a 429 that's a
-        // minute of looking "hung". Fail fast and say what happened.
+        schema: flashcardSchema,
+        system: PROMPTS.flashcard,
+        prompt: material,
+        // Speed boost (3-4x): uncomment ONLY if @ai-sdk/google is v2+
+        providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
         maxRetries: 1,
-      }).then((r) =>
-        r.object.cards.map((c) => ({ ...c, sourcePage: c.sourcePage || chunk.startPage }))
-      )
-    );
+      });
+      return r.object.cards.map<GeneratedCard>((c) => ({
+        type: "basic",
+        front: c.front,
+        back: c.back,
+        sourcePage: c.sourcePage || chunk.startPage,
+      }));
+    });
 
     const seen = new Set<string>();
-    cards = results
+    const cards = results
       .flat()
       .filter((c) => {
         const key = c.front.trim().toLowerCase();
@@ -104,12 +170,14 @@ export async function POST(req: Request) {
         return true;
       })
       .slice(0, MAX_CARDS);
+
+    return Response.json({ cards });
   } catch (err) {
+    const e = err as { statusCode?: number; data?: { status?: number }; message?: string };
+    const status = e.statusCode ?? e.data?.status;
     const msg = String(err);
 
-    // 429 = Gemini free-tier quota. One key serves EVERY user of the app,
-    // so concurrent testers drain it together.
-    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota")) {
+    if (status === 429 || msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota")) {
       return Response.json(
         {
           error:
@@ -121,6 +189,4 @@ export async function POST(req: Request) {
 
     return Response.json({ error: "Card generation failed", detail: msg }, { status: 500 });
   }
-
-  return Response.json({ cards });
 }
